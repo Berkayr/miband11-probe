@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESCCM
 import miproto
 from account_cloud import (BindError, HTTP, HealthClient, b64, browser_login, password_login,
                            private_read, private_write, text_field, unb64)
-from band_link import BandLink
+from band_link import BandLink, BleBandLink
 
 STATE = pathlib.Path(os.environ.get('XDG_STATE_HOME', pathlib.Path.home() / '.local/state')) / 'miband11-probe'
 
@@ -52,7 +52,15 @@ def server_bytes(obj, field):
     return value
 
 
-def bind(link, cloud, session, save, support_find=False, notify=print):
+def companion_device(ios=False):
+    """CompanionDevice: Android (0) claims no capability bits; iOS (1) mirrors Freeband MiBind.swift."""
+    if ios:
+        # The band kept LE advertising off after an Android-type bind; iOS clients declare type 1.
+        return miproto.pb_varint(1, 1) + miproto.pb_bytes(3, b'Linux') + miproto.pb_varint(4, 0xFFFFFFFF)
+    return miproto.pb_varint(1, 0) + miproto.pb_bytes(3, b'Linux')
+
+
+def bind(link, cloud, session, save, support_find=False, notify=print, ios=False):
     """Complete one bind attempt. Persist recovery material before mutating final steps."""
     info = message(link.exchange(miproto.bind_start_command(session['user_id']), 17), 12)
     if info.get(1) != 1 or info.get(5) != 3:
@@ -83,6 +91,7 @@ def bind(link, cloud, session, save, support_find=False, notify=print):
     oob = f'{code:06d}'.encode('ascii')
     bind_key = text_field(verified, 'bind_key')
     recovery = dict(context, address=link.address, user_id=session['user_id'],
+                    companion='ios' if ios else 'android',
                     phone_id=session['phone_id'], device_key=url_b64(key), bind_key=bind_key,
                     stage='before_device_confirm')
     save(recovery)
@@ -104,9 +113,8 @@ def bind(link, cloud, session, save, support_find=False, notify=print):
         raise BindError('Server did not confirm binding (ret != 1).')
     recovery['stage'] = 'server_bound_before_device_result'
     save(recovery)
-    # Linux identity, no Android capability bits claimed. Field 2 is a float SDK version.
-    companion = miproto.pb_varint(1, 0) + miproto.pb_bytes(3, b'Linux')
-    plaintext = miproto.pb_bytes(1, session['user_id'].encode()) + miproto.pb_bytes(2, companion)
+    # Field 2 of CompanionDevice is a float SDK version; left unset.
+    plaintext = miproto.pb_bytes(1, session['user_id'].encode()) + miproto.pb_bytes(2, companion_device(ios))
     sealed = AESCCM(key, tag_length=4).encrypt(bytes(range(0x10, 0x1c)), plaintext, b'bind-data')
     link.exchange(command(25, 29, miproto.pb_bytes(1, sealed)), 25)
     recovery['stage'] = 'device_result_acknowledged'
@@ -152,6 +160,8 @@ def main():
     pair = sub.add_parser('bind', help='bind your band using the saved Xiaomi session')
     pair.add_argument('--address', required=True)
     pair.add_argument('--channel', type=int, default=5)
+    pair.add_argument('--transport', choices=('spp', 'ble'), default='spp')
+    pair.add_argument('--companion', choices=('android', 'ios'), default='android')
     pair.add_argument('--support-find', action='store_true', help='experimental phone-finding capability')
     args = parser.parse_args()
     if args.action in ('login', 'login-browser'):
@@ -165,8 +175,10 @@ def main():
         raise BindError('Recovery file already exists; inspect outcome before attempting another bind.')
     cloud = HealthClient(session, text_field(session, 'region'))
     print('Starting a real bind with the Xiaomi account; keep the band nearby.')
-    with BandLink(args.address.upper(), args.channel) as link:
-        bind(link, cloud, session, lambda data: private_write(recovery_path, data), args.support_find)
+    link_type = BleBandLink if args.transport == 'ble' else BandLink
+    with link_type(args.address.upper(), args.channel) as link:
+        bind(link, cloud, session, lambda data: private_write(recovery_path, data), args.support_find,
+             ios=args.companion == 'ios')
     return 0
 
 

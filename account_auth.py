@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESCCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 import miproto
-from account_bind import STATE, binary_field, command, message
+from account_bind import STATE, binary_field, command, companion_device, message
 from account_cloud import BindError, HealthClient, private_read, private_write, text_field
 from band_link import BandLink, BleBandLink
 
@@ -34,7 +34,7 @@ def cloud_auth_key(result, did):
     return bytes.fromhex(value)
 
 
-def authenticate(link, auth_key):
+def authenticate(link, auth_key, ios=False):
     if len(auth_key) != 16:
         raise BindError('Auth key must contain 16 bytes.')
     phone = secrets.token_bytes(16)
@@ -44,8 +44,7 @@ def authenticate(link, auth_key):
     block = HKDF(hashes.SHA256(), 64, phone + watch, b'miwear-auth').derive(auth_key)
     if not hmac.compare_digest(hmac.digest(block[:16], watch + phone, 'sha256'), proof):
         raise BindError('Reconnect device HMAC is invalid; auth confirmation was not sent.')
-    companion = miproto.pb_varint(1, 0) + miproto.pb_bytes(3, b'Linux')
-    encrypted = AESCCM(block[16:32], tag_length=4).encrypt(block[36:40] + bytes(8), companion, None)
+    encrypted = AESCCM(block[16:32], tag_length=4).encrypt(block[36:40] + bytes(8), companion_device(ios), None)
     confirm = (miproto.pb_bytes(1, hmac.digest(block[16:32], phone + watch, 'sha256'))
                + miproto.pb_bytes(2, encrypted))
     result = message(link.exchange(command(27, 32, confirm), 27), 33)
@@ -78,7 +77,7 @@ def main():
     print('Trying auth on a fresh Bluetooth connection; no rebind.', flush=True)
     link_type = BleBandLink if args.transport == 'ble' else BandLink
     with link_type(address, args.channel) as link:
-        authenticate(link, bytes.fromhex(value))
+        authenticate(link, bytes.fromhex(value), ios=record.get('companion') == 'ios')
     record['auth_verified' if args.transport == 'spp' else 'ble_auth_verified'] = True
     private_write(path, record)
     print('Reconnect/auth succeeded. Band HMAC verified and 1/27 confirmation received.')

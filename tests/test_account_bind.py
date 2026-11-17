@@ -170,14 +170,23 @@ class FakeBand:
         ciphertext = pb.pb_parse(self_account[29])[1]
         plaintext = AESCCM(KEY, tag_length=4).decrypt(bytes(range(0x10, 0x1c)), ciphertext, b'bind-data')
         assert pb.pb_parse(plaintext)[1] == SESSION['user_id'].encode()
+        self.companion = pb.pb_parse(pb.pb_parse(plaintext)[2])
         return {3: 0}
 
 
 class BindTests(unittest.TestCase):
-    def run_bind(self, band=None, cloud=None, save=None):
+    def run_bind(self, band=None, cloud=None, save=None, ios=False):
         self.band, self.cloud, self.saved = band or FakeBand(), cloud or FakeCloud(), []
         persist = save or (lambda record: self.saved.append(copy.deepcopy(record)))
-        ab.bind(self.band, self.cloud, SESSION, persist, notify=lambda _: None)
+        ab.bind(self.band, self.cloud, SESSION, persist, notify=lambda _: None, ios=ios)
+
+    def test_companion_type_android_default_ios_optional(self):
+        self.run_bind()
+        self.assertEqual(self.band.companion[1], 0)
+        self.assertNotIn(4, self.band.companion)
+        self.run_bind(ios=True)
+        self.assertEqual((self.band.companion[1], self.band.companion[4]), (1, 0xFFFFFFFF))
+        self.assertEqual(self.saved[-1]['companion'], 'ios')
 
     def test_whole_bind_wire_flow_and_checkpoint_order(self):
         self.run_bind()
