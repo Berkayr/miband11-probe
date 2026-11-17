@@ -1,7 +1,11 @@
 # miband11-probe
 
-Research tools for the Xiaomi Smart Band 11: measure how a factory-fresh band wants to be
-bound, and bind it with a Xiaomi account **without installing Mi Fitness**.
+Pair a **Xiaomi Smart Band 11** without the Mi Fitness app and get its **auth key** on Linux.
+Also measures how a factory-fresh band wants to be bound (`verify_mode`), and documents
+every pairing route we tried, including the ones that fail.
+
+Keywords: Mi Band 11, Xiaomi Smart Band 11, Mi Fitness alternative, auth key, pairing without
+Mi Fitness, Gadgetbridge auth key, Freeband, SERVER_PSK, BindStartV2, Bluetooth reverse engineering.
 
 > Experimental. Not affiliated with or endorsed by Xiaomi. Use only with your own band and
 > your own account. Binding talks to Xiaomi's servers and changes the band's state.
@@ -23,6 +27,43 @@ checks it against a key in its firmware). After that, the 16-byte auth key is en
 authenticate on every new connection, offline.
 
 Only one band was tested. Other firmware versions, other bands and BLE auth are untested.
+
+## What did not work (save yourself the time)
+
+All on the same factory-fresh Band 11, 2026-11-17, before the account bind succeeded.
+
+| Attempt | What the band did |
+|---|---|
+| APP_LOCAL bind: `1/17` then `1/18 AppVerify` with a P-256 public key (Freeband / Band 8 style) | ACK, then dropped the connection |
+| `1/18 AppVerify` without `1/17` first | ACK, then 40 s of silence |
+| `1/17` with `check_dynamic_code = true`, name and pid | dropped the connection |
+| Old V1 account commands `1/0 BIND_STATUS`, `1/1 BIND_START`, `1/16 BOND_APPLY` | ACK, no answer |
+| `1/2 BIND_RESULT` with a random token | ACK, no answer |
+| `1/26` auth before any bind | `NO_BOUND (4)`, as expected |
+| `bleak` GATT discovery | empty service list: BlueZ connects this dual-mode band over BR/EDR. Use an LE-only ATT socket (`le_gatt.py`) |
+| SPP on RFCOMM channels 1-4 | 1 timed out, 2-4 refused; channel 5 is the one |
+| Direct password login when the account asks for email verification | stops (`ssecurity` missing); use `login-browser` |
+| BLE after a bind that declared an Android companion | no LE advertising at all, BLE connection refused |
+| Capturing the pairing with an iPhone `sysdiagnose` (Bluetooth logging profile) | only shows the iPhone's own links; it cannot see a Linux host pairing the band |
+
+Conclusion: there is no serverless first bind on this band. The server-signed bind through a
+Xiaomi account is the route that works.
+
+## FAQ
+
+**Can I pair a Mi Band 11 without Mi Fitness?** Yes, with a Xiaomi account: `account_bind.py`
+does the account bind directly. You still need an account; the band only accepts a
+server-signed first bind.
+
+**Can I pair it with no Xiaomi account and no server at all?** Not on the band we tested
+(`verify_mode = 1`). See the table above.
+
+**How do I get the auth key for Gadgetbridge or Freeband?** After `account_bind.py`,
+`account_auth.py` fetches the 16-byte key from your account once and stores it locally
+(`cloud_auth_key` in the state file). Using it in other apps is untested.
+
+**Does it work from an iPhone?** Not yet. iOS can only use BLE, and after our bind the band
+stopped advertising over LE (see above). Binding as an iOS companion is the next experiment.
 
 ## Tools
 
