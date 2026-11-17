@@ -119,6 +119,7 @@ BDADDR_LE_PUBLIC = 1
 # shortcut: 005e/005f value handles as discovered by le_gatt.py on a Band 11; discover by UUID if they ever differ
 RX_HANDLE, TX_HANDLE = 0x0016, 0x0019
 ATT_MTU = 247
+SOL_BLUETOOTH, BT_SECURITY, BT_SECURITY_MEDIUM = 274, 4, 2
 
 
 class _SockaddrL2(ctypes.Structure):
@@ -131,10 +132,13 @@ def _l2_address(address):
     return _SockaddrL2(socket.AF_BLUETOOTH, 0, (ctypes.c_ubyte * 6)(*raw), ATT_CID, BDADDR_LE_PUBLIC)
 
 
-def le_att_socket(address):
+def le_att_socket(address, secure=False):
     """LE-only ATT socket; BlueZ would otherwise pick BR/EDR for this dual-mode band."""
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET, socket.BTPROTO_L2CAP)
     try:
+        if secure:
+            # Encrypt with the stored LE bond; without it the band shows "Pair with phone" on every auth.
+            sock.setsockopt(SOL_BLUETOOTH, BT_SECURITY, struct.pack('BB', BT_SECURITY_MEDIUM, 0))
         if hasattr(socket, 'BDADDR_LE_PUBLIC'):
             sock.bind((socket.BDADDR_ANY, 0, ATT_CID, socket.BDADDR_LE_PUBLIC))
             sock.settimeout(20)
@@ -157,8 +161,10 @@ def le_att_socket(address):
 class BleBandLink(BandLink):
     """Same framed protocol over BLE V2: write commands to 005f, notifications from 005e."""
 
+    secure = False
+
     def open(self):
-        self.sock = le_att_socket(self.address)
+        self.sock = le_att_socket(self.address, self.secure)
         self.sock.settimeout(20)
         self.request(struct.pack('<BH', 0x02, ATT_MTU), 0x03)
         self.request(struct.pack('<BHH', 0x12, RX_HANDLE + 1, 1), 0x13)
@@ -186,3 +192,8 @@ class BleBandLink(BandLink):
                 return b''
             if pdu[0] == 0x1B and struct.unpack('<H', pdu[1:3])[0] == RX_HANDLE:
                 return pdu[3:]
+
+
+class SecureBleBandLink(BleBandLink):
+    """BLE link encrypted with the host's LE bond; needs one pairing accepted on the band first."""
+    secure = True

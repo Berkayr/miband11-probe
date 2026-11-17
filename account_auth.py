@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 import miproto
 from account_bind import STATE, binary_field, command, companion_device, message
 from account_cloud import BindError, HealthClient, private_read, private_write, text_field
-from band_link import BandLink, BleBandLink
+from band_link import BandLink, SecureBleBandLink
 
 
 def cloud_auth_key(result, did):
@@ -75,7 +75,7 @@ def main():
     if not re.fullmatch(r'[0-9a-fA-F]{32}', value):
         raise BindError('Stored auth key is invalid.')
     print('Trying auth on a fresh Bluetooth connection; no rebind.', flush=True)
-    link_type = BleBandLink if args.transport == 'ble' else BandLink
+    link_type = SecureBleBandLink if args.transport == 'ble' else BandLink
     with link_type(address, args.channel) as link:
         authenticate(link, bytes.fromhex(value), ios=record.get('companion') == 'ios')
     record['auth_verified' if args.transport == 'spp' else 'ble_auth_verified'] = True
