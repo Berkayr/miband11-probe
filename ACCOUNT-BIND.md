@@ -88,12 +88,16 @@ the default), the band stops LE advertising and only SPP works. Binding with
 `bind --transport ble --companion ios` (`device_type = 1`, like Mi Fitness on iOS and Freeband)
 keeps LE advertising on and turns SPP off.
 
-After an iOS-type bind the band requires an LE bond. On the first auth attempt it starts
-numeric-comparison pairing and shows a prompt on its screen; the host side must accept too.
-Without a pairing agent the band sends command 1/16 with Account field 10 = `{1: 3}` and
-disconnects. With an agent running (for example `bluetoothctl` with `agent on`,
-`default-agent`, answering `yes`) and the prompt accepted on the band, it sends `{1: 2}`,
-auth succeeds, and later connections authenticate with no prompt.
+After an iOS-type bind the band wants an encrypted LE link from a bonded host:
+- First auth: the band shows "Pair with phone" and starts numeric-comparison pairing; the host
+  must accept too (for example `bluetoothctl` with `agent on`, `default-agent`, answering `yes`).
+  It then sends command 1/16 with Account field 10 = `{1: 2}` and auth succeeds. Without a host
+  agent, or if declined on the band, it sends `{1: 3}` or nothing and disconnects.
+- Later auth runs: an unencrypted link makes the band show "Pair with phone" again every time,
+  even with the bond stored. `account_auth.py --transport ble` therefore requests
+  `BT_SECURITY_MEDIUM` on the ATT socket so the kernel encrypts with the stored key; auth then
+  completes in about one second with no prompt (verified 6 times on 2026-11-17).
+- Binding keeps the plain link, since a reset band has no bond yet.
 
 Offline verification (from the project directory):
 
