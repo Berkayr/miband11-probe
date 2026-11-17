@@ -1,0 +1,17 @@
+# raw frames, keys, identifiers
+logs/
+*.log
+*.jsonl
+*.pklg
+*.tar.gz
+# local notes (personal context)
+BAGLAM.md
+DEVIR.md
+RAPOR-*.md
+AGENTS.md
+CLAUDE.md
+# python
+.venv/
+__pycache__/
+*.pyc
+.env
