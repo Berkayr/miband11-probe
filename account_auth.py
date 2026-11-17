@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 import miproto
 from account_bind import STATE, binary_field, command, message
 from account_cloud import BindError, HealthClient, private_read, private_write, text_field
-from band_link import BandLink
+from band_link import BandLink, BleBandLink
 
 
 def cloud_auth_key(result, did):
@@ -57,6 +57,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--address', required=True)
     parser.add_argument('--channel', type=int, default=5)
+    parser.add_argument('--transport', choices=('spp', 'ble'), default='spp')
     args = parser.parse_args()
     address = args.address.upper()
     if not re.fullmatch(r'(?:[0-9A-F]{2}:){5}[0-9A-F]{2}', address) or not 1 <= args.channel <= 30:
@@ -75,9 +76,10 @@ def main():
     if not re.fullmatch(r'[0-9a-fA-F]{32}', value):
         raise BindError('Stored auth key is invalid.')
     print('Trying auth on a fresh Bluetooth connection; no rebind.', flush=True)
-    with BandLink(address, args.channel) as link:
+    link_type = BleBandLink if args.transport == 'ble' else BandLink
+    with link_type(address, args.channel) as link:
         authenticate(link, bytes.fromhex(value))
-    record['auth_verified'] = True
+    record['auth_verified' if args.transport == 'spp' else 'ble_auth_verified'] = True
     private_write(path, record)
     print('Reconnect/auth succeeded. Band HMAC verified and 1/27 confirmation received.')
     return 0

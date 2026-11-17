@@ -16,6 +16,7 @@ bound, and bind it with a Xiaomi account **without installing Mi Fitness**.
 | Transports | BT Classic SPP on RFCOMM channel 5; BLE V2 (service `FE95`, characteristics `005E`/`005F`) |
 | Xiaomi-account bind without Mi Fitness | **works** (`account_bind.py`) |
 | Reconnect auth with the stored key | **works**, no server needed after the first bind (`account_auth.py`) |
+| BLE after binding as an Android companion (`device_type = 0`) | band stops LE advertising; SPP keeps working. BLE auth is untested |
 
 So the first bind of a Band 11 needs Xiaomi's server (the server signs the exchange; the band
 checks it against a key in its firmware). After that, the 16-byte auth key is enough to

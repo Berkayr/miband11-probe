@@ -81,6 +81,13 @@ checkpoint as `cloud_auth_key`. It then verifies the band HMAC and requires the 
 No rebinding or reset is performed. A wrong HMAC stops before auth confirmation is sent.
 The command authenticates and disconnects; continuous data sync is outside its scope.
 
+`--transport ble` runs the same auth over BLE V2 (write commands to `005f`, notifications
+from `005e`, LE-only ATT socket; Python < 3.14 builds the `sockaddr_l2` with ctypes).
+Observed on 2026-11-17: after a bind that declared an Android companion (`device_type = 0`,
+which this client sends), the band no longer advertises over LE, so the BLE connection is
+refused. Mi Fitness on iOS and Freeband declare `device_type = 1` (IOS); whether a bind with
+that value keeps LE advertising is untested.
+
 Offline verification (from the project directory):
 
 ```sh
