@@ -10,7 +10,7 @@ Mi Fitness, Gadgetbridge auth key, Freeband, SERVER_PSK, BindStartV2, Bluetooth 
 > Experimental. Not affiliated with or endorsed by Xiaomi. Use only with your own band and
 > your own account. Binding talks to Xiaomi's servers and changes the band's state.
 
-## Findings (one Band 11, model `miwear.watch.q66gln`, 2026-11-17)
+## Findings (one Band 11, model `miwear.watch.q66gln`, 2026-11-17/18)
 
 | Question | Result |
 |---|---|
@@ -20,13 +20,18 @@ Mi Fitness, Gadgetbridge auth key, Freeband, SERVER_PSK, BindStartV2, Bluetooth 
 | Transports | BT Classic SPP on RFCOMM channel 5; BLE V2 (service `FE95`, characteristics `005E`/`005F`) |
 | Xiaomi-account bind without Mi Fitness | **works** (`account_bind.py`) |
 | Reconnect auth with the stored key | **works**, no server needed after the first bind (`account_auth.py`) |
-| BLE after binding as an Android companion (`device_type = 0`) | band stops LE advertising; SPP keeps working. BLE auth is untested |
+| BLE after binding as an Android companion (`device_type = 0`) | band stops LE advertising; SPP keeps working |
+| Bind as an iOS companion (`device_type = 1`, `--transport ble --companion ios`) | **works**; LE advertising stays on, SPP is no longer offered |
+| BLE reconnect auth after an iOS bind | **works**, but only on an encrypted (LE-bonded) link. On a plain link the band shows "Pair with Phone" every time and reports `1/16` with account field 10 = `{1: 3}` (failed) or `{1: 2}` (ok) |
+| Silent BLE reconnect | **works** once bonded: set `BT_SECURITY_MEDIUM` on the ATT socket so the kernel encrypts with the stored LTK; no prompt, ~1 s |
+| Freeband (iPhone, TestFlight 0.5.3) with this key | **works**: battery, heart rate and steps came in. Band 11 is not on Freeband's supported list |
 
 So the first bind of a Band 11 needs Xiaomi's server (the server signs the exchange; the band
 checks it against a key in its firmware). After that, the 16-byte auth key is enough to
 authenticate on every new connection, offline.
 
-Only one band was tested. Other firmware versions, other bands and BLE auth are untested.
+Only one band was tested. Other firmware versions and other bands are untested. HRV and sleep
+files from the Band 11 were not checked.
 
 ## What did not work (save yourself the time)
 
@@ -60,10 +65,13 @@ server-signed first bind.
 
 **How do I get the auth key for Gadgetbridge or Freeband?** After `account_bind.py`,
 `account_auth.py` fetches the 16-byte key from your account once and stores it locally
-(`cloud_auth_key` in the state file). Using it in other apps is untested.
+(`cloud_auth_key` in the state file). For Freeband, `freeband_key.py` writes it as a
+`manifest.sqlite` (the Mi Fitness format Freeband reads); pick that file in Freeband's
+import screen. Tested with Freeband on iPhone. Gadgetbridge is untested.
 
-**Does it work from an iPhone?** Not yet. iOS can only use BLE, and after our bind the band
-stopped advertising over LE (see above). Binding as an iOS companion is the next experiment.
+**Does it work from an iPhone?** Yes, with Freeband. Bind with `--transport ble --companion ios`
+from Linux, export the key with `freeband_key.py`, copy `manifest.sqlite` to the phone (Files),
+import it in Freeband, then accept "Pair with Phone" on the band and the iOS pairing dialog once.
 
 ## Tools
 
@@ -73,6 +81,7 @@ stopped advertising over LE (see above). Binding as an iOS companion is the next
 | `account_bind.py` | Xiaomi login (password or browser with email verification) and a full SERVER_PSK bind over RFCOMM. |
 | `open_browser_login.py` | Runs the browser login on an SSH host and opens Xiaomi's login page on your desktop. |
 | `account_auth.py` | Fetches the persistent auth key once, then authenticates a fresh connection with it. |
+| `freeband_key.py` | Writes the stored key as a `manifest.sqlite` for Freeband's key import (mode 600; delete it after import). |
 | `le_gatt.py` | Read-only GATT listing over an LE-only ATT socket (BlueZ picks BR/EDR for this dual-mode band). |
 | `force_local.py`, `v1_probe.py` | Experiments that try the APP_LOCAL and older V1 account commands. Kept for the record. |
 

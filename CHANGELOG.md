@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning: [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `account_bind.py --transport ble --companion ios`: bind as an iOS companion so the band keeps LE on.
+- `freeband_key.py`: export the stored key as a `manifest.sqlite` for Freeband's key import (tested on iPhone).
+
+### Fixed
+- BLE auth uses an encrypted, bonded link, so the band no longer asks "Pair with Phone" on every reconnect.
+
 ## [0.1.0] - 2026-11-17
 
 ### Added
